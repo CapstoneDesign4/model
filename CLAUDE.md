@@ -15,17 +15,61 @@
 
 ## 시작하기
 
-의존성 및 툴링이 확정되면 설치 방법을 여기에 추가하세요. (예: `pip install -r requirements.txt`, 가상 환경 설정 등)
+```powershell
+# 가상환경 생성 및 활성화
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+
+# 의존성 설치
+pip install -r requirements.txt
+
+# YAMNet 로딩 검증 (최초 실행 시 모델 다운로드 발생)
+python scripts/verify_inference.py
+
+# WAV 파일로 검증 (샘플 파일이 있을 경우)
+python scripts/verify_inference.py --file data/sample/test.wav
+```
 
 ## 명령어
 
-프로젝트 구조가 정의되면 빌드, 실행, 테스트, 린트 명령어를 여기에 추가하세요.
+```powershell
+# WAV 파일 위험 소리 분석
+python -m src.cli --input data/sample/test.wav --threshold 0.5 --verbose
+
+# 마이크 실시간 분석
+python -m src.cli --input mic --threshold 0.4 --log output/run.jsonl
+
+# 임계값 0으로 강제 트리거 (동작 확인용)
+python -m src.cli --input data/sample/test.wav --threshold 0.0
+
+# 단위 테스트 (네트워크 불필요 테스트만)
+pytest tests/ -v
+
+# 단위 테스트 (YAMNet 로딩 포함, 네트워크 필요)
+pytest tests/ -v -k "yamnet"
+```
 
 ## 아키텍처
 
-코드베이스가 생성되면 진입점, 주요 모듈, 데이터 흐름, 비직관적인 설계 결정 등 고수준 아키텍처 내용을 여기에 추가하세요. 예상되는 구성 요소:
+진입점: `src/cli.py` (`python -m src.cli`)
 
-- 오디오 입력/캡처 단
-- 노이즈 캔슬링 전처리 단
-- YAMNet 추론 단 (위험 클래스 필터링 포함)
-- 임베디드 모듈로의 알림/통신 단
+데이터 흐름:
+```
+[마이크/파일 입력 16kHz mono]
+  → audio_io/ (링 버퍼, 0.96s 윈도우 / 0.48s hop)
+  → preprocess/ (노이즈 캔슬링, M2 이후)
+  → model/yamnet_wrapper.py (TF-Hub YAMNet, backbone freeze)
+  → model/danger_filter.py (12종 화이트리스트 score 추출)
+  → postprocess/trigger.py (임계값 + cooldown)
+  → embedded/uart_sender.py (UART JSON 알림, M5 이후)
+```
+
+주요 설계 결정:
+- YAMNet backbone 전체 freeze. M3에서 경량 헤드(Dense 2층, sigmoid)만 학습.
+- 출력은 argmax 단일 라벨이 아닌 클래스별 독립 sigmoid (multi-label).
+- 화이트리스트 12종 인덱스: 11, 20, 302, 304, 390, 391, 393, 394, 420, 421, 435, 437, 464.
+- glass(435) + shatter(437)는 max()로 통합하여 `glass_shatter` 단일 이벤트 처리.
+- 후처리: 단일 임계값(M1) → debounce K/N 다수결(M2) → 환경별 프로파일(M3).
+
+상세 스펙: `docs/m1-initial-model-spec.md`
+전체 계획: `docs/development-plan.md`

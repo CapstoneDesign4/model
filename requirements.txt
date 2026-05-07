@@ -1,0 +1,23 @@
+# M1 베이스라인 의존성
+# YAMNet 추론 파이프라인 기준 (docs/m1-initial-model-spec.md §9.1)
+
+# TensorFlow — 2.16+ 는 Keras 3 기본. 2.13~2.15 범위로 고정
+tensorflow>=2.13,<2.16
+tensorflow-hub>=0.15
+
+# 수치 연산 — TF 버전과 호환 확인 (numpy 2.x 불호환)
+numpy>=1.24,<2.0
+
+# 오디오 처리
+librosa>=0.10
+soundfile>=0.12
+scipy>=1.11
+
+# 마이크 스트림 (PortAudio 의존; Windows: pip 자동 설치)
+sounddevice>=0.4.6
+
+# 설정 파일
+pyyaml>=6.0
+
+# 테스트 (dev 의존성)
+pytest>=7.4
