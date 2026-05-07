@@ -1,0 +1,77 @@
+# 위험 소리 클래스 화이트리스트 설정
+# 인덱스 기준: yamnet_class_map.csv (YAMNet 521 클래스)
+# 문서 참조: docs/m1-initial-model-spec.md §4
+
+danger_classes:
+  - key: screaming
+    display_name: "Screaming"
+    yamnet_index: 11
+    threshold: 0.5
+    cooldown_sec: 5.0
+
+  - key: baby_cry
+    display_name: "Baby cry, infant cry"
+    yamnet_index: 20
+    threshold: 0.5
+    cooldown_sec: 5.0
+
+  # glass(435) + shatter(437) 두 인덱스의 max()를 단일 이벤트로 처리
+  - key: glass_shatter
+    display_name: "Glass / Shatter"
+    yamnet_indices: [435, 437]
+    threshold: 0.5
+    cooldown_sec: 5.0
+
+  - key: breaking
+    display_name: "Breaking"
+    yamnet_index: 464
+    threshold: 0.5
+    cooldown_sec: 5.0
+
+  - key: gunshot
+    display_name: "Gunshot, gunfire"
+    yamnet_index: 421
+    threshold: 0.5
+    cooldown_sec: 5.0
+
+  - key: explosion
+    display_name: "Explosion"
+    yamnet_index: 420
+    threshold: 0.5
+    cooldown_sec: 5.0
+
+  - key: fire_alarm
+    display_name: "Fire alarm"
+    yamnet_index: 394
+    threshold: 0.5
+    cooldown_sec: 5.0
+
+  - key: smoke_alarm
+    display_name: "Smoke detector, smoke alarm"
+    yamnet_index: 393
+    threshold: 0.5
+    cooldown_sec: 5.0
+
+  - key: siren
+    display_name: "Siren"
+    yamnet_index: 390
+    threshold: 0.5
+    cooldown_sec: 5.0
+
+  - key: civil_defense_siren
+    display_name: "Civil defense siren"
+    yamnet_index: 391
+    threshold: 0.5
+    cooldown_sec: 5.0
+
+  - key: car_alarm
+    display_name: "Car alarm"
+    yamnet_index: 304
+    threshold: 0.5
+    cooldown_sec: 5.0
+
+  - key: vehicle_horn
+    display_name: "Vehicle horn, car horn, honking"
+    yamnet_index: 302
+    threshold: 0.5
+    cooldown_sec: 5.0

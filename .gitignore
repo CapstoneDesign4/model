@@ -1,0 +1,68 @@
+# 가상환경
+.venv/
+venv/
+env/
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# 빌드/배포
+build/
+dist/
+*.egg-info/
+*.egg
+
+# 테스트/커버리지
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 데이터 (대용량 raw 데이터는 저장소에서 제외)
+data/raw/
+data/processed/
+*.wav
+*.mp3
+*.flac
+*.ogg
+
+# 단, 검증용 샘플은 허용
+!data/sample/
+
+# 모델 가중치/체크포인트
+*.tflite
+*.h5
+*.keras
+*.ckpt
+checkpoints/
+
+# TF-Hub 캐시 (로컬 캐시 디렉터리)
+tfhub_modules/
+
+# 실험 출력
+output/
+experiments/**/*.jsonl
+experiments/**/*.csv
+experiments/**/*.png
+
+# 로그
+*.log
+*.jsonl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 환경변수
+.env
+.env.*
