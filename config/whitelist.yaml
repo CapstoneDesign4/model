@@ -2,6 +2,14 @@
 # 인덱스 기준: yamnet_class_map.csv (YAMNet 521 클래스)
 # 문서 참조: docs/m1-initial-model-spec.md §4
 
+# ─────────────────────────────────────────────────
+# 글로벌 debounce 설정 (클래스별 오버라이드 없으면 이 값 사용)
+# M2 신규 추가. 해당 블록이 없으면 기본값 window=3, k=2 적용.
+# ─────────────────────────────────────────────────
+debounce:
+  window: 3   # int, 슬라이딩 윈도우 크기 (N)
+  k: 2        # int, 트리거 최소 양성 투표 수 (K)
+
 danger_classes:
   - key: screaming
     display_name: "Screaming"
