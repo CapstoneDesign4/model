@@ -1,27 +1,27 @@
-# 가상환경
+﻿# 媛?곹솚寃?
 .venv/
 venv/
 env/
 
-# Python 캐시
+# Python 罹먯떆
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
 
-# 빌드/배포
+# 鍮뚮뱶/諛고룷
 build/
 dist/
 *.egg-info/
 *.egg
 
-# 테스트/커버리지
+# ?뚯뒪??而ㅻ쾭由ъ?
 .pytest_cache/
 .coverage
 htmlcov/
 
-# 데이터 (대용량 raw 데이터는 저장소에서 제외)
+# ?곗씠??(??⑸웾 raw ?곗씠?곕뒗 ??μ냼?먯꽌 ?쒖쇅)
 data/raw/
 data/processed/
 *.wav
@@ -29,26 +29,27 @@ data/processed/
 *.flac
 *.ogg
 
-# 단, 검증용 샘플은 허용
+# ?? 寃利앹슜 ?섑뵆? ?덉슜
 !data/sample/
+!data/sample/**
 
-# 모델 가중치/체크포인트
+# 紐⑤뜽 媛以묒튂/泥댄겕?ъ씤??
 *.tflite
 *.h5
 *.keras
 *.ckpt
 checkpoints/
 
-# TF-Hub 캐시 (로컬 캐시 디렉터리)
+# TF-Hub 罹먯떆 (濡쒖뺄 罹먯떆 ?붾젆?곕━)
 tfhub_modules/
 
-# 실험 출력
+# ?ㅽ뿕 異쒕젰
 output/
 experiments/**/*.jsonl
 experiments/**/*.csv
 experiments/**/*.png
 
-# 로그
+# 濡쒓렇
 *.log
 *.jsonl
 
@@ -63,9 +64,9 @@ experiments/**/*.png
 Thumbs.db
 desktop.ini
 
-# 환경변수
+# ?섍꼍蹂??
 .env
 .env.*
 
-# Claude Code 로컬 설정 (개인 환경별 상이, 저장소 미포함)
+# Claude Code 濡쒖뺄 ?ㅼ젙 (媛쒖씤 ?섍꼍蹂??곸씠, ??μ냼 誘명룷??
 .claude/settings.local.json

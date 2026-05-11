@@ -117,7 +117,7 @@ class TestTrigger:
         from src.postprocess.trigger import Trigger
         f = DangerFilter()
         f.override_threshold(0.5)
-        return Trigger(f)
+        return Trigger(f, debounce_enabled=False)
 
     def test_trigger_fires_above_threshold(self, trigger):
         """임계값 초과 score는 TriggerEvent를 반환해야 한다."""
