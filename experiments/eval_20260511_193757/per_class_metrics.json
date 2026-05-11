@@ -1,0 +1,25 @@
+{
+  "mode": "per_class",
+  "tp": 12,
+  "fp": 0,
+  "fn": 0,
+  "tn": 6,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "false_alarm_rate": 0.0,
+  "thresholds": {
+    "screaming": 0.5,
+    "baby_cry": 0.15,
+    "glass_shatter": 0.4,
+    "breaking": 0.4,
+    "gunshot": 0.5,
+    "explosion": 0.98,
+    "fire_alarm": 0.5,
+    "smoke_alarm": 0.5,
+    "siren": 0.5,
+    "civil_defense_siren": 0.5,
+    "car_alarm": 0.5,
+    "vehicle_horn": 0.5
+  }
+}
