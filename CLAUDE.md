@@ -72,5 +72,17 @@ pytest tests/ -v -k "yamnet"
 - glass(435) + shatter(437)는 max()로 통합하여 `glass_shatter` 단일 이벤트 처리.
 - 후처리: 단일 임계값(M1) → debounce K/N 다수결(M2) → 환경별 프로파일(M3).
 
-상세 스펙: `docs/m1-initial-model-spec.md`
+## M2 Debounce 결정 사항 (2026-05-10 확정)
+
+- **Debounce K/N**: 클래스별 독립 슬라이딩 윈도우 N=3, 트리거 임계 K=2 (2/3 다수결).
+- **상태 자료구조**: `DebounceState` (deque maxlen=N) 를 기존 `Trigger` 클래스 내부에 추가. 외부 인터페이스 최대한 유지.
+- **cooldown 위치**: debounce 통과 후 적용 (순서: debounce → cooldown → emit).
+- **config/whitelist.yaml 변경**: 최상단에 글로벌 `debounce: {window: 3, k: 2}` 블록 추가. 블록 없으면 기본값 적용 (하위 호환).
+- **CLI 신규 옵션**: `--debounce-window` (int, 기본 3), `--debounce-k` (int, 기본 2), `--no-debounce` (flag).
+- **JSONL 로그**: `debounce_votes` 필드 상시 추가 (--log 사용 시).
+- **verbose 출력**: `--verbose` 시 클래스별 votes 이력 `[a,b,c]` 및 sum/N 표시.
+- **이번 PR 비범위**: WebRTC NS 통합, NS on/off A/B 스크립트 (별도 후속 PR).
+- **단위 테스트**: `tests/test_debounce_trigger.py`, TC-1~TC-5 (YAMNet 로드 없이 실행 가능).
+
+상세 스펙: `docs/m1-initial-model-spec.md` (M1), `docs/m2-debounce-spec.md` (M2 Debounce)
 전체 계획: `docs/development-plan.md`
