@@ -86,3 +86,16 @@ pytest tests/ -v -k "yamnet"
 
 상세 스펙: `docs/m1-initial-model-spec.md` (M1), `docs/m2-debounce-spec.md` (M2 Debounce)
 전체 계획: `docs/development-plan.md`
+M1 개선 노트: `docs/m1-improvement-notes.md`
+
+## M1 현황 및 M2 착수 전 우선 과제
+
+> 2026-05-11 기준. 마이크 실시간 분석 동작 확인 완료. 조용한 환경에서 전 클래스 0.0000~0.0025 수준으로 false positive 없음 (정상).
+
+**M2 전에 반드시 처리해야 할 P1 항목:**
+
+1. **평가 데이터셋 수집 및 검증**: ESC-50/FSD50K 위험 클래스 WAV를 `data/sample/`에 배치하고 `--threshold 0.0 --verbose`로 실제 YAMNet 점수 기록. M1 Exit Criteria(F1 ≥ 0.6) 판정 전제 조건.
+2. **클래스별 임계값 근거 확보**: 단일 임계값 0.4가 모든 클래스에 적절한지 미검증. 위험 소리 입력 시 점수 분포 측정 필요.
+3. **YAMNet 인덱스 최종 확인**: `development-plan.md`와 `m1-initial-model-spec.md`의 인덱스 표 불일치 — `yamnet_class_map.csv` 직접 조회로 `config/whitelist.yaml` 13개 인덱스 확정 필요.
+
+상세 분석: `docs/m1-improvement-notes.md`
