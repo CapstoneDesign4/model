@@ -320,7 +320,7 @@ model/
 
 | 패키지 | 권장 버전 | 용도 | 비고 |
 |---|---|---|---|
-| `tensorflow` | `>=2.13, <2.17` | YAMNet 추론 | GPU 있으면 `tensorflow[and-cuda]` |
+| `tensorflow` | `>=2.13, <2.16` | YAMNet 추론 | Python 3.11 기준 |
 | `tensorflow-hub` | `>=0.15` | TF-Hub YAMNet 로딩 | |
 | `numpy` | `>=1.24, <2.0` | 배열 연산 | TF 버전과 호환 확인 필요 |
 | `librosa` | `>=0.10` | 오디오 로드, 리샘플링 | |
@@ -332,7 +332,7 @@ model/
 
 ### 9.2 버전 호환 주의 사항
 
-- TensorFlow 2.16+는 Keras 3 기본 사용 → 기존 코드와 충돌 가능. `TF_USE_LEGACY_KERAS=1` 환경변수 또는 `tf-keras` 패키지 별도 설치 필요.
+- TensorFlow 2.16+는 Keras 3 기본 사용으로 기존 코드와 충돌 가능성이 있어 M1은 Python 3.11 + TensorFlow 2.13~2.15 범위로 고정한다.
 - `sounddevice`는 PortAudio C 라이브러리 의존. Windows: `pip install sounddevice`로 자동 설치, Linux/라즈베리파이: `sudo apt install libportaudio2` 필요.
 - `librosa` 0.10+는 `audioread` 대신 `soundfile` 우선 사용. WAV 외 포맷 처리 시 `ffmpeg` 설치 권장.
 
@@ -352,7 +352,7 @@ model/
 
 ### 10.1 환경 구성
 
-- [ ] Python 3.10 이상 가상환경 생성 (`python -m venv .venv`)
+- [ ] Python 3.11 가상환경 생성 (`py -3.11 -m venv .venv`)
 - [ ] `requirements.txt` 작성 및 `pip install -r requirements.txt` 확인
 - [ ] Windows 환경에서 PortAudio 설치 확인 (`python -c "import sounddevice"`)
 - [ ] TensorFlow 설치 확인 (`python -c "import tensorflow as tf; print(tf.__version__)"`)

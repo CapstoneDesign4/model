@@ -18,7 +18,7 @@
 
 ## 2. 사전 준비
 
-- Python 3.10 이상 (Windows)
+- Python 3.11 (Windows)
 - 인터넷 연결 (TF-Hub에서 YAMNet 1회 다운로드)
 - 동작 가능한 입력 마이크 (노트북 내장 또는 USB 마이크)
 
@@ -26,12 +26,30 @@
 
 PowerShell에서 프로젝트 루트(`C:\CapstoneDesign\model`)에 위치한 상태로 진행합니다.
 
-### 3.1 가상환경 생성·활성화
+### 3.1 Python 3.11 가상환경 생성·활성화
+
+Python 3.11 설치 여부를 먼저 확인합니다.
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
+py -3.11 --version
 ```
+
+이미 Python 3.12로 `.venv`를 만들었다면 삭제 후 다시 생성합니다.
+
+```powershell
+deactivate
+Remove-Item -Recurse -Force .\.venv
+```
+
+Python 3.11로 새 가상환경을 생성합니다.
+
+```powershell
+py -3.11 -m venv .venv
+.venv\Scripts\Activate.ps1
+python --version
+```
+
+`python --version` 출력이 `Python 3.11.x`인지 확인합니다.
 
 > Activate.ps1 실행이 막히면 1회만:
 > ```powershell
@@ -45,10 +63,7 @@ pip install -r requirements.txt
 ```
 
 - 5~10분 소요 (TensorFlow 용량 큼)
-- pip가 TF 2.16+를 끌어오면 명시적으로 다운그레이드:
-  ```powershell
-  pip install "tensorflow>=2.13,<2.16"
-  ```
+- Python 3.11에서 TensorFlow 2.13~2.15 범위가 설치됩니다. Python 3.12 가상환경에서는 이 범위의 TensorFlow가 설치되지 않습니다.
 
 ### 3.3 환경 검증 (YAMNet 최초 다운로드 포함)
 
@@ -71,7 +86,7 @@ python -c "import sounddevice; print(sounddevice.query_devices())"
   ...
 ```
 
-`>` 표시가 기본 입력 장치. 기본 장치가 원하는 마이크가 아니면 인덱스를 메모해두고 CLI에 `--device <idx>` 전달 (현재 CLI에 미노출이면 추가 필요).
+`>` 표시가 기본 입력 장치. 기본 장치가 원하는 마이크가 아니면 인덱스를 메모해두고 CLI에 `--device <idx>`를 전달합니다.
 
 ### 3.5 실시간 분석 실행
 
@@ -107,7 +122,7 @@ python -m src.cli --input mic --threshold 0.4 --verbose --log output/run.jsonl
 
 ### 4.3 cooldown
 
-같은 클래스가 5초 내 재트리거되지 않습니다. (`config/whitelist.yaml`의 `cooldown_seconds`)
+같은 클래스가 5초 내 재트리거되지 않습니다. (`config/whitelist.yaml`의 `cooldown_sec`)
 
 ## 5. 알려진 제한 (M1)
 

@@ -16,9 +16,10 @@
 ## 시작하기
 
 ```powershell
-# 가상환경 생성 및 활성화
-python -m venv .venv
+# Python 3.11 가상환경 생성 및 활성화
+py -3.11 -m venv .venv
 .venv\Scripts\Activate.ps1
+python --version
 
 # 의존성 설치
 pip install -r requirements.txt

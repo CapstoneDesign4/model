@@ -1,7 +1,7 @@
 # M1 베이스라인 의존성
 # YAMNet 추론 파이프라인 기준 (docs/m1-initial-model-spec.md §9.1)
 
-# TensorFlow — 2.16+ 는 Keras 3 기본. 2.13~2.15 범위로 고정
+# TensorFlow — Python 3.11 기준. 2.16+는 Keras 3 기본이라 M1은 2.13~2.15 범위로 고정.
 tensorflow>=2.13,<2.16
 tensorflow-hub>=0.15
 
