@@ -5,7 +5,15 @@
       "Bash(Select-Object -Property Name, Mode)",
       "Bash(Format-Table -AutoSize)",
       "Bash(dir /s /b)",
-      "Bash(find *)"
+      "Bash(find *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "PowerShell(New-Item *)",
+      "PowerShell(python \"C:\\\\CapstoneDesign\\\\model\\\\scripts\\\\_check_yaml.py\" 2>&1)",
+      "PowerShell(gh auth *)",
+      "PowerShell(git checkout *)",
+      "PowerShell(git *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }
