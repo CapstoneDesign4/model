@@ -1,6 +1,13 @@
 # 위험 소리 클래스 화이트리스트 설정
 # 인덱스 기준: yamnet_class_map.csv (YAMNet 521 클래스)
 # 문서 참조: docs/m1-initial-model-spec.md §4
+#
+# 클래스별 threshold 근거 (experiments/eval_20260511_192355 기반, ESC-50 18개 샘플):
+#   - baby_cry 0.15  : 데이터 최저 max score 0.1656 회수
+#   - glass_shatter / breaking 0.4 : 한 샘플이 0.54/0.59 → 0.5에서 놓침
+#   - explosion 0.98 : negative footsteps(1-155858-A-25)가 0.9717로 오탐 → 차단
+#   - siren / vehicle_horn 0.5 : 최저 score 0.65/0.87 로 여유 충분
+#   - 그 외 클래스는 평가 샘플 부족 → 0.5 보수적 유지
 
 # ─────────────────────────────────────────────────
 # 글로벌 debounce 설정 (클래스별 오버라이드 없으면 이 값 사용)
@@ -20,20 +27,20 @@ danger_classes:
   - key: baby_cry
     display_name: "Baby cry, infant cry"
     yamnet_index: 20
-    threshold: 0.5
+    threshold: 0.15
     cooldown_sec: 5.0
 
   # glass(435) + shatter(437) 두 인덱스의 max()를 단일 이벤트로 처리
   - key: glass_shatter
     display_name: "Glass / Shatter"
     yamnet_indices: [435, 437]
-    threshold: 0.5
+    threshold: 0.4
     cooldown_sec: 5.0
 
   - key: breaking
     display_name: "Breaking"
     yamnet_index: 464
-    threshold: 0.5
+    threshold: 0.4
     cooldown_sec: 5.0
 
   - key: gunshot
@@ -45,7 +52,7 @@ danger_classes:
   - key: explosion
     display_name: "Explosion"
     yamnet_index: 420
-    threshold: 0.5
+    threshold: 0.98
     cooldown_sec: 5.0
 
   - key: fire_alarm
