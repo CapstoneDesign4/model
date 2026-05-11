@@ -66,3 +66,6 @@ desktop.ini
 # 환경변수
 .env
 .env.*
+
+# Claude Code 로컬 설정 (개인 환경별 상이, 저장소 미포함)
+.claude/settings.local.json
