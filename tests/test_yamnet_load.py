@@ -12,6 +12,7 @@ import pytest
 
 def _yamnet_available() -> bool:
     """TF-Hub YAMNet 접근 가능 여부를 확인한다."""
+    # tensorflow/tensorflow_hub가 설치되지 않은 CI 환경에서는 자동으로 skip되도록 한다.
     try:
         import tensorflow_hub as hub  # noqa: F401
         import tensorflow as tf       # noqa: F401

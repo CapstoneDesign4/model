@@ -18,6 +18,7 @@ from src.postprocess.trigger import Trigger, TriggerEvent
 
 
 def _parse_args() -> argparse.Namespace:
+    # CLI 인자 파서 정의. ArgumentDefaultsHelpFormatter로 --help 시 기본값을 자동 표시한다.
     parser = argparse.ArgumentParser(
         description="YAMNet 기반 위험 소리 감지기",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -103,14 +104,17 @@ def _validate_debounce_args(window: int, k: int) -> None:
 
 
 def _fmt_ts(epoch: float) -> str:
+    # Unix epoch 시각을 "YYYY-MM-DD HH:MM:SS.mmm" 문자열로 변환 (밀리초 3자리까지 표시).
     return datetime.fromtimestamp(epoch).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
 
 def _print_danger(event: TriggerEvent) -> None:
+    # 위험 이벤트 한 건을 콘솔에 한 줄로 출력한다.
     print(f"[{_fmt_ts(event.timestamp)}] DANGER: {event.key} (score={event.score:.4f})")
 
 
 def _print_no_danger(timestamp: float, scores: dict[str, float]) -> None:
+    # 트리거가 없을 때 가장 점수가 높은 클래스를 표시하여 모니터링 가시성을 확보한다.
     if not scores:
         return
     top_key = max(scores, key=lambda k: scores[k])
@@ -128,22 +132,24 @@ def _print_verbose(
     ts_str = _fmt_ts(timestamp)
     print(f"[{ts_str}] WINDOW scores:")
 
+    # 12종 클래스 각각에 대해 score, debounce 큐 상태, 판정 결과를 출력한다.
     for key, score in scores.items():
         state = trigger.get_debounce_state(key)
-        votes = state.snapshot()
-        vote_sum = sum(votes)
-        n = state.N
-        k = state.K
+        votes = state.snapshot()       # 현재 슬라이딩 윈도우 투표 이력
+        vote_sum = sum(votes)          # 양성 투표 수 = sum
+        n = state.N                    # 윈도우 크기 N
+        k = state.K                    # 트리거 최소 양성 수 K
 
         if debounce_enabled:
+            # 디바운스 통과/쿨다운 활성 여부를 별도로 판단해 상태 문자열을 결정.
             passed = vote_sum >= k
             cooldown_active = state.is_cooldown_active(timestamp, 5.0)
             if passed and cooldown_active:
-                status = "COOLDOWN"
+                status = "COOLDOWN"   # K 충족했지만 쿨다운으로 억제됨
             elif passed:
-                status = "PASS"
+                status = "PASS"       # 트리거 가능 상태
             else:
-                status = "--"
+                status = "--"         # K 미충족
             votes_str = "[" + ",".join(str(v) for v in votes) + "]"
             print(
                 f"  {key:<22}: {score:.4f}  votes={votes_str}  sum={vote_sum}/{n}  {status}"
@@ -180,16 +186,18 @@ def run_file_mode(
     debounce_enabled: bool,
     log_file: Optional[object],
 ) -> None:
+    # 파일 모드는 무거운 audio_io import를 함수 진입 시점으로 지연한다.
     from src.audio_io.file_reader import iter_file_frames
 
     print(f"[INFO] 파일 분석 시작: {path}", file=sys.stderr)
-    wall_start = time.time()
+    wall_start = time.time()  # 파일 내부 timestamp(0초 기준)를 벽시계로 변환할 때 사용
 
+    # 0.96s 윈도우를 순차로 받아 YAMNet 추론 → 위험 클래스 필터 → 트리거 판정 파이프라인 실행.
     for ts_sec, frame in iter_file_frames(path, hop_sec=hop_sec):
-        mean_scores = yamnet.infer_mean_scores(frame)
-        scores = danger_filter.extract(mean_scores)
-        now = wall_start + ts_sec
-        events = trigger.evaluate(scores, now=now)
+        mean_scores = yamnet.infer_mean_scores(frame)   # (521,) 평균 score 벡터
+        scores = danger_filter.extract(mean_scores)     # 12종 위험 클래스만 추출
+        now = wall_start + ts_sec                       # 실시간 로그 시각 일관성 유지
+        events = trigger.evaluate(scores, now=now)      # debounce/cooldown 적용
 
         if verbose:
             _print_verbose(now, scores, trigger, debounce_enabled)
@@ -219,16 +227,18 @@ def run_mic_mode(
     log_file: Optional[object],
     device: Optional[int],
 ) -> None:
+    # 마이크 모드 진입 시점에 sounddevice import (--help 경로 보호).
     from src.audio_io.mic_stream import MicStream
 
-    hop_samples = int(hop_sec * 16000)
+    hop_samples = int(hop_sec * 16000)  # 초 단위 hop을 16kHz 샘플 수로 변환
     mic = MicStream(device=device, hop_samples=hop_samples)
-    mic.start()
+    mic.start()  # 비동기 콜백 스레드로 PCM 캡처 시작
     print("[INFO] 마이크 스트림 시작. Ctrl+C로 종료.", file=sys.stderr)
 
     try:
+        # 마이크는 무한 스트림이므로 KeyboardInterrupt(Ctrl+C)로만 종료된다.
         for _elapsed, frame in mic.iter_frames():
-            now = time.time()
+            now = time.time()  # 마이크는 실시간이므로 벽시계를 그대로 사용
             mean_scores = yamnet.infer_mean_scores(frame)
             scores = danger_filter.extract(mean_scores)
             events = trigger.evaluate(scores, now=now)
@@ -255,21 +265,25 @@ def run_mic_mode(
 
 
 def main() -> None:
+    # 1) CLI 인자 파싱.
     args = _parse_args()
 
-    # 화이트리스트 로드 + 임계값 오버라이드
+    # 2) 화이트리스트(YAML)에서 12종 위험 클래스 + 임계값 + cooldown 로드.
     danger_filter = DangerFilter(config_path=args.config)
     if args.threshold != 0.5:
+        # 사용자가 명시적으로 --threshold를 준 경우만 전 클래스 일괄 오버라이드.
         danger_filter.override_threshold(args.threshold)
 
-    # debounce 파라미터: CLI > YAML > 기본값 순서로 적용
+    # 3) debounce 파라미터: CLI > YAML > 기본값(3, 2) 순으로 우선 적용.
     debounce_window = args.debounce_window or danger_filter.debounce_config.window
     debounce_k = args.debounce_k or danger_filter.debounce_config.k
     debounce_enabled = not args.no_debounce
 
     if not args.no_debounce:
+        # debounce 활성 시 K <= N 등 유효성 사전 검증 (불일치면 sys.exit).
         _validate_debounce_args(debounce_window, debounce_k)
 
+    # 4) 트리거 인스턴스 생성: 클래스별 DebounceState 초기화 포함.
     trigger = Trigger(
         danger_filter,
         debounce_window=debounce_window,
@@ -277,20 +291,22 @@ def main() -> None:
         debounce_enabled=debounce_enabled,
     )
 
-    # YAMNet은 실제 추론이 필요한 시점에만 import (--help는 여기에 도달하지 않음)
+    # 5) YAMNet은 텐서플로 의존이 무겁기 때문에 --help 경로를 보호하기 위해 늦게 import.
     from src.model.yamnet_wrapper import YAMNetWrapper  # noqa: PLC0415
 
-    # YAMNet 로드
+    # 6) TF-Hub에서 YAMNet 로드 (최초 1회 ~수십 MB 다운로드 발생).
     print("[INFO] YAMNet 로딩 중 (최초 실행 시 다운로드 발생)...", file=sys.stderr)
     yamnet = YAMNetWrapper()
     print("[INFO] YAMNet 로딩 완료.", file=sys.stderr)
 
+    # 7) --log 옵션이 있으면 JSONL 파일을 append 모드로 열어둔다.
     log_file = None
     if args.log:
         log_path = Path(args.log)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_file = log_path.open("a", encoding="utf-8")
 
+    # 8) --input 값에 따라 마이크/파일 분기. log_file은 finally에서 안전하게 닫는다.
     try:
         if args.input.lower() == "mic":
             run_mic_mode(

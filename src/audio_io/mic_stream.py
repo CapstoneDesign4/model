@@ -31,9 +31,12 @@ class MicStream:
         self._hop_samples = hop_samples
         self._window_samples = WINDOW_SAMPLES
         self._device = device
+        # 콜백 스레드 → 메인 스레드로 PCM 청크를 전달하는 thread-safe 큐.
         self._q: queue.Queue[np.ndarray] = queue.Queue()
         self._stream: Optional[sd.InputStream] = None
+        # 윈도우 단위로 잘라내기 위한 누적 버퍼 (메인 스레드 전용).
         self._buffer = np.zeros(0, dtype=np.float32)
+        # iter_frames 루프 종료 신호.
         self._stop_event = threading.Event()
 
     def _callback(
@@ -48,11 +51,14 @@ class MicStream:
             # 오버플로 등 상태 경고를 stderr에 출력하지만 계속 동작
             import sys
             print(f"[MicStream] sounddevice status: {status}", file=sys.stderr)
+        # indata: (frames, channels). mono(channels=1)의 0번 채널만 추출해 큐로 넘긴다.
+        # copy()를 호출하지 않으면 sounddevice 내부 버퍼와 메모리를 공유해 데이터가 덮어쓰일 수 있다.
         self._q.put(indata[:, 0].copy().astype(np.float32))
 
     def start(self) -> None:
         """마이크 스트림을 시작한다."""
         self._stop_event.clear()
+        # blocksize=hop_samples로 설정하여 콜백이 정확히 hop 단위로 호출되도록 한다.
         self._stream = sd.InputStream(
             samplerate=self._sr,
             channels=1,
@@ -87,16 +93,18 @@ class MicStream:
 
         while not self._stop_event.is_set():
             try:
+                # timeout=1.0으로 polling 하여 stop_event를 주기적으로 감지한다.
                 chunk = self._q.get(timeout=1.0)
             except queue.Empty:
                 continue
 
+            # 새 청크를 누적 버퍼 뒤에 이어붙인다.
             self._buffer = np.concatenate([self._buffer, chunk])
 
-            # 윈도우 길이 이상 누적됐으면 앞에서부터 hop만큼 슬라이딩
+            # 윈도우 길이 이상 누적됐으면 앞에서부터 hop만큼 슬라이딩 (50% 오버랩).
             while len(self._buffer) >= self._window_samples:
                 frame = self._buffer[: self._window_samples].copy()
-                self._buffer = self._buffer[self._hop_samples :]
+                self._buffer = self._buffer[self._hop_samples :]  # 앞 hop만 제거 → 다음 윈도우와 오버랩
                 elapsed_sec = window_count * (self._hop_samples / self._sr)
                 window_count += 1
                 yield elapsed_sec, frame

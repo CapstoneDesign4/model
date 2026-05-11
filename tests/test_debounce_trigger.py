@@ -26,6 +26,8 @@ from src.postprocess.trigger import DebounceState, Trigger, TriggerEvent
 # 공통 픽스처
 # ─────────────────────────────────────────────────────────────────────────────
 
+# whitelist.yaml과 동일한 12종 위험 클래스 키. Mock DangerFilter가 이 목록을 사용해
+# 실제 YAML 로드 없이 Trigger를 생성한다.
 ALL_KEYS = [
     "screaming", "baby_cry", "glass_shatter", "breaking",
     "gunshot", "explosion", "fire_alarm", "smoke_alarm",

@@ -18,6 +18,8 @@ _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 
 
+# whitelist.yaml에 명시된 12종 위험 클래스의 YAMNet 521-차원 인덱스 모음.
+# 검증 스크립트에서 점수 표시 대상이며, glass(435) + shatter(437)은 통합 클래스에 해당.
 DANGER_INDICES = [11, 20, 302, 304, 390, 391, 393, 394, 420, 421, 435, 437, 464]
 
 
@@ -37,6 +39,7 @@ def main() -> None:
     # 2. 입력 준비
     print("[2/4] 입력 준비...")
     if args.file:
+        # 실제 WAV 파일 첫 0.96s만 잘라 추론. 더 짧으면 zero-pad.
         import librosa
         audio, _ = librosa.load(args.file, sr=16000, mono=True)
         waveform = audio[:15360].astype(np.float32)
@@ -44,6 +47,7 @@ def main() -> None:
             waveform = np.pad(waveform, (0, 15360 - len(waveform)))
         print(f"      파일 입력: {args.file}  shape={waveform.shape}")
     else:
+        # 파일이 없으면 무음(zeros)으로도 출력 shape이 정상인지 확인할 수 있다.
         waveform = np.zeros(15360, dtype=np.float32)
         print(f"      더미 입력 (zeros): shape={waveform.shape}")
 
@@ -67,7 +71,8 @@ def main() -> None:
     print("[4/4] 위험 클래스 평균 score:")
     avg_scores = scores_np.mean(axis=0)  # shape (521,)
 
-    # YAMNet class_map은 모델 내부 에셋에서 가져옴
+    # YAMNet class_map은 모델 내부 에셋에서 가져옴 (yamnet_class_map.csv).
+    # 인덱스 ↔ 사람이 읽을 수 있는 라벨 매핑을 만들어 출력에 사용한다.
     try:
         class_map_path = yamnet.class_map_path().numpy().decode("utf-8")
         import csv
@@ -77,6 +82,7 @@ def main() -> None:
             for row in reader:
                 class_names[int(row["index"])] = row["display_name"]
     except Exception:
+        # class_map 로드 실패 시에도 점수 표시는 가능하도록 빈 dict로 폴백.
         class_names = {}
 
     for idx in DANGER_INDICES:

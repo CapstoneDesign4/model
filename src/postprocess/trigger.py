@@ -30,8 +30,9 @@ class DebounceState:
     """
 
     def __init__(self, window: int, k: int) -> None:
-        self.N: int = window
-        self.K: int = k
+        self.N: int = window  # 슬라이딩 윈도우 크기
+        self.K: int = k       # 트리거 발생에 필요한 최소 양성 투표 수
+        # deque(maxlen=N)이므로 push할 때 자동으로 가장 오래된 항목이 빠진다.
         self.votes: deque[int] = deque(maxlen=window)
         # -inf 대신 float('-inf')를 사용해 초기 cooldown 체크가 항상 통과하도록 한다.
         self.last_trigger_ts: float = float("-inf")
@@ -74,7 +75,8 @@ class Trigger:
         self._filter = danger_filter
         self._debounce_enabled = debounce_enabled
 
-        # 클래스별 독립 DebounceState 초기화
+        # 클래스별 독립 DebounceState 초기화.
+        # 한 클래스의 투표 이력이 다른 클래스에 영향을 주지 않도록 별도 상태를 유지한다.
         self._debounce_states: Dict[str, DebounceState] = {
             entry.key: DebounceState(window=debounce_window, k=debounce_k)
             for entry in danger_filter.classes
@@ -95,33 +97,37 @@ class Trigger:
             트리거된 TriggerEvent 리스트 (없으면 빈 리스트).
         """
         if now is None:
-            now = time.time()
+            now = time.time()  # 테스트에서는 결정론적 시각을 명시 주입한다.
 
         events: List[TriggerEvent] = []
+        # key → DangerClassEntry 빠른 조회용 맵.
         entry_map: Dict[str, DangerClassEntry] = {
             e.key: e for e in self._filter.classes
         }
 
+        # 12종 클래스 각각에 대해 독립적으로 판정.
         for key, score in scores.items():
             entry = entry_map[key]
             state = self._debounce_states[key]
 
+            # 임계값을 넘으면 1, 아니면 0인 이진 투표로 변환.
             vote = 1 if score >= entry.threshold else 0
 
             if self._debounce_enabled:
                 # M2 경로: 투표 누적 후 K/N 다수결 평가
                 state.push(vote)
 
+                # 순서: debounce 통과 → cooldown 미활성 → emit
                 if state.is_debounce_passed():
                     if not state.is_cooldown_active(now, entry.cooldown_sec):
-                        state.record_trigger(now)
+                        state.record_trigger(now)  # cooldown 시작점 갱신
                         events.append(
                             TriggerEvent(
                                 key=key,
                                 display_name=entry.display_name,
                                 score=score,
                                 timestamp=now,
-                                debounce_votes=state.snapshot(),
+                                debounce_votes=state.snapshot(),  # 디버깅용 투표 스냅샷
                             )
                         )
             else:

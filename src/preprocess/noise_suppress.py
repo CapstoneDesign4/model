@@ -6,6 +6,8 @@
 # 참조: docs/development-plan.md §4.2
 
 
+# M1 단계에서는 외부에서 suppress()를 호출해도 입력을 그대로 돌려준다 (no-op).
+# M2 이후 WebRTC NS가 통합되면 이 함수가 실제 노이즈 억제를 수행한다.
 def suppress(audio_16k_mono, aggressiveness: int = 1):
     """노이즈 억제를 수행한다 (M2 구현 후 동작).
 
