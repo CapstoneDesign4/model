@@ -2,13 +2,26 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import yaml
 
 DEFAULT_CONFIG = Path(__file__).parent.parent.parent / "config" / "whitelist.yaml"
+
+# debounce 블록이 없을 때 사용하는 기본값 (M1 설정 파일 하위 호환)
+_DEFAULT_DEBOUNCE_WINDOW = 3
+_DEFAULT_DEBOUNCE_K = 2
+
+
+@dataclass
+class DebounceConfig:
+    """YAML debounce 블록에서 읽어온 글로벌 debounce 설정."""
+
+    window: int = _DEFAULT_DEBOUNCE_WINDOW
+    k: int = _DEFAULT_DEBOUNCE_K
 
 
 class DangerClassEntry:
@@ -33,9 +46,17 @@ class DangerFilter:
         config_path = Path(config_path)
         with config_path.open("r", encoding="utf-8") as f:
             raw = yaml.safe_load(f)
+
         self.classes: List[DangerClassEntry] = [
             DangerClassEntry(c) for c in raw["danger_classes"]
         ]
+
+        # debounce 블록이 없으면 기본값 적용 (M1 whitelist.yaml 하위 호환)
+        debounce_raw = raw.get("debounce", {})
+        self.debounce_config = DebounceConfig(
+            window=int(debounce_raw.get("window", _DEFAULT_DEBOUNCE_WINDOW)),
+            k=int(debounce_raw.get("k", _DEFAULT_DEBOUNCE_K)),
+        )
 
     def extract(self, scores_521: np.ndarray) -> Dict[str, float]:
         """shape (521,) scores 벡터에서 화이트리스트 클래스별 점수를 반환한다.
