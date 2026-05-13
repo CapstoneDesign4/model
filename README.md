@@ -335,72 +335,21 @@ python -m pytest tests -v
 
 ## 12. Docker 사용법
 
-Python / TensorFlow / PortAudio 환경 세팅 없이 WAV 파일 분석과 pytest를 실행할 수 있습니다.
-마이크 실시간 분석(`--input mic`)은 Docker에서 지원하지 않습니다. 마이크 모드는 호스트 venv 환경에서 실행하세요. (Linux 사용자는 `--device /dev/snd` 옵션으로 실험적 시도가 가능합니다.)
-
-### 빌드
-
-첫 빌드 시 TensorFlow 설치 + YAMNet 다운로드로 10~15분 소요될 수 있습니다. 이후 재빌드는 레이어 캐시로 빠르게 완료됩니다.
+Docker로 파일 모드 분석을 빠르게 실행할 수 있습니다. Python / TensorFlow / PortAudio 환경 구성 없이 WAV 파일 분석과 pytest를 실행하고 싶은 경우에 적합합니다. 마이크 모드(`--input mic`)는 Docker에서 지원하지 않으므로 호스트 venv 워크플로를 사용하세요.
 
 ```powershell
+# 이미지 빌드 (최초 1회, 10~15분 소요)
 docker build -t yamnet-danger:latest .
-```
 
-### 파일 분석 (Windows PowerShell)
+# 출력 폴더 준비
+mkdir output -ErrorAction SilentlyContinue
 
-`output/` 디렉터리가 없으면 미리 만들어야 합니다.
-
-```powershell
-New-Item -ItemType Directory -Force output
-```
-
-```powershell
+# WAV 파일 분석
 docker run --rm `
   -v "${PWD}/data/sample:/app/data/sample:ro" `
   -v "${PWD}/output:/app/output" `
-  yamnet-danger:latest --input data/sample/test.wav --threshold 0.5 --verbose
+  yamnet-danger:latest `
+  --input data/sample/test.wav --threshold 0.5 --verbose
 ```
 
-### 파일 분석 (macOS/Linux bash)
-
-```bash
-mkdir -p output
-docker run --rm \
-  -v "$PWD/data/sample:/app/data/sample:ro" \
-  -v "$PWD/output:/app/output" \
-  yamnet-danger:latest --input data/sample/test.wav --threshold 0.5 --verbose
-```
-
-### 임계값 0 강제 트리거 (동작 확인용)
-
-```powershell
-docker run --rm `
-  -v "${PWD}/data/sample:/app/data/sample:ro" `
-  yamnet-danger:latest --input data/sample/test.wav --threshold 0.0
-```
-
-### 테스트 실행
-
-```powershell
-docker run --rm --entrypoint pytest yamnet-danger:latest tests/ -v
-```
-
-### config 오버라이드 (선택)
-
-```powershell
-docker run --rm `
-  -v "${PWD}/data/sample:/app/data/sample:ro" `
-  -v "${PWD}/output:/app/output" `
-  -v "${PWD}/config:/app/config:ro" `
-  yamnet-danger:latest --input data/sample/test.wav --threshold 0.4 --verbose
-```
-
-### 트러블슈팅
-
-| 증상 | 해결 |
-|---|---|
-| 빌드가 10분 이상 걸림 | 정상입니다. TF 설치 + YAMNet 다운로드 포함. 재빌드는 레이어 캐시로 빠릅니다. |
-| `output/` 관련 오류 | 실행 전 `New-Item -ItemType Directory -Force output`으로 호스트에 디렉터리를 만드세요. |
-| `data/sample/` 비어 있음 | 분석할 WAV 파일을 `data/sample/`에 넣은 뒤 다시 실행하세요. |
-| Windows 경로 마운트 실패 | Docker Desktop > Settings > Resources > File Sharing에 `C:` 드라이브가 공유 설정되어 있는지 확인하세요. WSL2 백엔드 사용을 권장합니다. |
-| `--input mic` 오류 | Docker 환경에서는 마이크 모드를 지원하지 않습니다. 호스트 venv 환경에서 실행하세요. |
+상세 사용법: [docs/docker-usage.md](docs/docker-usage.md)
