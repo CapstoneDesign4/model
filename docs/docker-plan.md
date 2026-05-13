@@ -49,7 +49,7 @@
 
 멀티스테이지를 고려했으나, TensorFlow 자체가 런타임 라이브러리(libc, libstdc++ 등)에 의존하므로 build stage에서 컴파일한 바이너리만 복사하는 방식이 효과가 제한적이다. pip 캐시 레이어 최적화만으로 충분한 효과를 얻을 수 있으므로 단일스테이지로 유지한다.
 
-단, 추후 학습(M3)용 이미지가 필요해지면 `FROM danger-sound:inference AS base` 형태의 다단계 분리를 검토한다.
+단, 추후 학습(M3)용 이미지가 필요해지면 `FROM yamnet-danger:inference AS base` 형태의 다단계 분리를 검토한다.
 
 ### 2.3 YAMNet 모델 빌드 타임 캐시
 
@@ -73,7 +73,9 @@
 | pyyaml, pytest 등 | ~10MB |
 | YAMNet TF-Hub 캐시 | ~17MB |
 | 소스 코드 + 설정 | ~1MB |
-| **합계 (압축 전)** | **~1.1GB** |
+| **합계 (압축 전, 추정)** | **~1.1GB** |
+
+> 실측: 2026-05-14 빌드 기준 `docker image ls` 가 표시하는 디스크 점유량은 **약 3.77GB**. 위 표는 패키지 자체 크기 합산 추정이고, 실제 이미지에는 apt 시스템 라이브러리(libsndfile1/ffmpeg/libportaudio2 등 약 466MB)와 베이스 OS, 빌드 산출물이 더해진다. 팀원 안내 시 **~5GB 디스크 여유 권장**.
 
 TF 자체가 1GB에 육박하므로 이미지 크기를 극적으로 줄이는 것은 불가능하다. 이 점을 팀원에게 미리 안내해야 한다. 첫 `docker pull` 또는 `docker build`에 시간이 걸리지만 이후 레이어 캐시로 재빌드는 빠르다.
 
@@ -148,7 +150,7 @@ build/
 ### 3.1 이미지 빌드
 
 ```bash
-docker build -t danger-sound:latest .
+docker build -t yamnet-danger:latest .
 ```
 
 빌드 시 YAMNet 다운로드가 포함되므로 첫 빌드는 네트워크 속도에 따라 5~15분 소요된다. 이후 재빌드는 레이어 캐시로 수분 내 완료된다.
@@ -161,7 +163,7 @@ docker run --rm \
   -v "$(pwd)/data/sample:/app/data/sample:ro" \
   -v "$(pwd)/output:/app/output" \
   -v "$(pwd)/config:/app/config:ro" \
-  danger-sound:latest \
+  yamnet-danger:latest \
   python -m src.cli --input data/sample/test.wav --threshold 0.5 --verbose
 
 # Windows PowerShell
@@ -169,7 +171,7 @@ docker run --rm `
   -v "${PWD}/data/sample:/app/data/sample:ro" `
   -v "${PWD}/output:/app/output" `
   -v "${PWD}/config:/app/config:ro" `
-  danger-sound:latest `
+  yamnet-danger:latest `
   python -m src.cli --input data/sample/test.wav --threshold 0.5 --verbose
 ```
 
@@ -179,20 +181,20 @@ docker run --rm `
 # Linux / macOS
 docker run --rm \
   -v "$(pwd)/data/sample:/app/data/sample:ro" \
-  danger-sound:latest \
+  yamnet-danger:latest \
   python -m src.cli --input data/sample/test.wav --threshold 0.0
 
 # Windows PowerShell
 docker run --rm `
   -v "${PWD}/data/sample:/app/data/sample:ro" `
-  danger-sound:latest `
+  yamnet-danger:latest `
   python -m src.cli --input data/sample/test.wav --threshold 0.0
 ```
 
 ### 3.4 YAMNet 로딩 검증
 
 ```bash
-docker run --rm danger-sound:latest python scripts/verify_inference.py
+docker run --rm yamnet-danger:latest python scripts/verify_inference.py
 ```
 
 네트워크 없이 실행 가능 (빌드 타임에 캐시된 모델 사용).
@@ -201,10 +203,10 @@ docker run --rm danger-sound:latest python scripts/verify_inference.py
 
 ```bash
 # 네트워크 불필요 테스트만 (YAMNet 로드 없음)
-docker run --rm danger-sound:latest pytest tests/ -v
+docker run --rm yamnet-danger:latest pytest tests/ -v
 
 # YAMNet 로딩 포함 테스트 (빌드 타임 캐시 덕분에 네트워크 불필요)
-docker run --rm danger-sound:latest pytest tests/ -v -k "yamnet"
+docker run --rm yamnet-danger:latest pytest tests/ -v -k "yamnet"
 ```
 
 ### 3.6 로그 출력과 함께 파일 분석
@@ -215,7 +217,7 @@ docker run --rm \
   -v "$(pwd)/data/sample:/app/data/sample:ro" \
   -v "$(pwd)/output:/app/output" \
   -v "$(pwd)/config:/app/config:ro" \
-  danger-sound:latest \
+  yamnet-danger:latest \
   python -m src.cli \
     --input data/sample/test.wav \
     --threshold 0.4 \
@@ -227,7 +229,7 @@ docker run --rm `
   -v "${PWD}/data/sample:/app/data/sample:ro" `
   -v "${PWD}/output:/app/output" `
   -v "${PWD}/config:/app/config:ro" `
-  danger-sound:latest `
+  yamnet-danger:latest `
   python -m src.cli `
     --input data/sample/test.wav `
     --threshold 0.4 `
@@ -247,7 +249,7 @@ docker run --rm \
   --device /dev/snd \
   -v "$(pwd)/output:/app/output" \
   -v "$(pwd)/config:/app/config:ro" \
-  danger-sound:latest \
+  yamnet-danger:latest \
   python -m src.cli --input mic --threshold 0.4
 
 # Linux — PulseAudio over TCP 방식 (더 안정적이나 설정 필요)
@@ -255,7 +257,7 @@ docker run --rm \
 docker run --rm \
   -e PULSE_SERVER=tcp:host.docker.internal:4713 \
   -v "$(pwd)/output:/app/output" \
-  danger-sound:latest \
+  yamnet-danger:latest \
   python -m src.cli --input mic --threshold 0.4
 ```
 
@@ -335,19 +337,19 @@ New-Item -ItemType Directory -Force output  # Windows PowerShell
 ### 7.1 빌드
 
 ```bash
-docker build -t danger-sound:latest .
+docker build -t yamnet-danger:latest .
 ```
 
 확인 항목:
 - [ ] 빌드가 오류 없이 완료됨
 - [ ] `RUN python scripts/verify_inference.py` 단계에서 YAMNet 다운로드 로그가 출력됨
-- [ ] 최종 이미지 크기가 예상 범위(~1.1GB 전후) 이내임 (`docker images danger-sound`)
+- [ ] 최종 이미지 크기 실측(`docker images yamnet-danger`) — 2026-05-14 기준 ~3.77GB
 
 ### 7.2 기본 동작 확인
 
 ```bash
 # 1. YAMNet 로딩만 확인 (네트워크 없이)
-docker run --rm danger-sound:latest python scripts/verify_inference.py
+docker run --rm yamnet-danger:latest python scripts/verify_inference.py
 ```
 
 기대: `YAMNet 로드 성공` 등의 메시지, 오류 없이 종료.
@@ -356,7 +358,7 @@ docker run --rm danger-sound:latest python scripts/verify_inference.py
 # 2. 임계값 0 강제 트리거 (WAV 파일 필요)
 docker run --rm \
   -v "$(pwd)/data/sample:/app/data/sample:ro" \
-  danger-sound:latest \
+  yamnet-danger:latest \
   python -m src.cli --input data/sample/test.wav --threshold 0.0
 ```
 
@@ -365,7 +367,7 @@ docker run --rm \
 ### 7.3 pytest 통과 확인
 
 ```bash
-docker run --rm danger-sound:latest pytest tests/ -v
+docker run --rm yamnet-danger:latest pytest tests/ -v
 ```
 
 기대: `test_debounce_trigger.py` TC-1~TC-5 전체 통과.
@@ -377,7 +379,7 @@ mkdir -p output
 docker run --rm \
   -v "$(pwd)/data/sample:/app/data/sample:ro" \
   -v "$(pwd)/output:/app/output" \
-  danger-sound:latest \
+  yamnet-danger:latest \
   python -m src.cli --input data/sample/test.wav --threshold 0.0 --log output/run.jsonl
 ```
 
@@ -389,7 +391,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/data/sample:/app/data/sample:ro" \
   -v "$(pwd)/config:/app/config:ro" \
-  danger-sound:latest \
+  yamnet-danger:latest \
   python -m src.cli --input data/sample/test.wav --threshold 0.5 --verbose
 ```
 
@@ -399,7 +401,7 @@ docker run --rm \
 
 ## 8. 위험 요소와 대응
 
-### 8.1 이미지 크기 (~1.1GB)
+### 8.1 이미지 크기 (실측 ~3.77GB)
 
 **위험**: TensorFlow 단독으로 850MB 이상을 차지해 이미지가 크다. 팀원이 처음 `docker pull`하거나 빌드할 때 시간이 오래 걸릴 수 있다.
 
