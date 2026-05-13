@@ -1,0 +1,59 @@
+# 가상환경 (수백 MB)
+.venv/
+venv/
+env/
+
+# Python 바이트코드
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# 데이터 파일 — 런타임에 볼륨 마운트로 주입
+data/raw/
+data/processed/
+*.wav
+*.mp3
+*.flac
+
+# data/sample/ 은 이미지에 포함하지 않고 볼륨 마운트 권장.
+# 포함하려면 아래 주석 해제: !data/sample/*.wav
+
+# 모델 가중치 — 빌드 타임 TF-Hub 캐시로 대체
+*.tflite
+*.h5
+*.keras
+checkpoints/
+tfhub_modules/
+
+# 출력/실험 로그
+output/
+experiments/
+*.log
+*.jsonl
+
+# Git / CI
+.git/
+.github/
+
+# pytest 캐시
+.pytest_cache/
+
+# 에디터 메타
+.vscode/
+.idea/
+.claude/
+.cursor/
+
+# OS 파일
+.DS_Store
+Thumbs.db
+
+# 빌드 산출물
+dist/
+build/
+*.egg-info/
+
+# 문서 (컨테이너 내에서 참조하지 않음)
+docs/
+*.md
