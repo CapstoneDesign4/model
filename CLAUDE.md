@@ -50,6 +50,22 @@ pytest tests/ -v
 pytest tests/ -v -k "yamnet"
 ```
 
+### Docker 명령어 (Python/TF 환경 불필요)
+
+```powershell
+# 이미지 빌드 (첫 빌드: 10~15분 소요)
+docker build -t yamnet-danger:latest .
+
+# WAV 파일 분석
+docker run --rm `
+  -v "${PWD}/data/sample:/app/data/sample:ro" `
+  -v "${PWD}/output:/app/output" `
+  yamnet-danger:latest --input data/sample/test.wav --threshold 0.5 --verbose
+
+# pytest 실행
+docker run --rm --entrypoint pytest yamnet-danger:latest tests/ -v
+```
+
 ## 아키텍처
 
 진입점: `src/cli.py` (`python -m src.cli`)
@@ -99,3 +115,14 @@ M1 개선 노트: `docs/m1-improvement-notes.md`
 3. **YAMNet 인덱스 최종 확인**: `development-plan.md`와 `m1-initial-model-spec.md`의 인덱스 표 불일치 — `yamnet_class_map.csv` 직접 조회로 `config/whitelist.yaml` 13개 인덱스 확정 필요.
 
 상세 분석: `docs/m1-improvement-notes.md`
+
+## Docker 도입 계획 (2026-05-14 결정)
+
+- **파일 모드 한정 지원**: `--input <wav>` 및 `pytest`는 Docker로 단일 명령 실행 가능.
+- **마이크 모드 비목표**: macOS/Windows는 venv 워크플로 유지. Linux는 `/dev/snd` 바인드로 실험적 가능.
+- **베이스 이미지**: `python:3.11-slim` (glibc 호환성 + 최소 크기).
+- **YAMNet 빌드 타임 캐시**: `ENV TFHUB_CACHE_DIR=/opt/tfhub_cache` + `RUN python scripts/verify_inference.py`로 첫 실행 시 네트워크 불필요.
+- **볼륨**: `data/sample`(ro), `output`(rw), `config`(ro, 선택).
+- **docker-compose.yml**: 현 단계 불필요, MQTT 등 사이드카 추가 시 재검토.
+
+상세: `docs/docker-plan.md`

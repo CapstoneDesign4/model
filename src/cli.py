@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -16,6 +18,217 @@ from typing import Optional
 from src.model.danger_filter import DangerFilter
 from src.postprocess.trigger import Trigger, TriggerEvent
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LiveDisplay: 마이크 모드 전용 in-place 터미널 갱신 헬퍼
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _ansi_supported() -> bool:
+    """ANSI escape code 사용 가능 여부를 판정한다.
+
+    조건:
+      1. stdout 이 TTY 일 것.
+      2. 환경변수 NO_COLOR 가 설정되지 않을 것.
+    Windows Terminal / PowerShell 7+ 은 기본적으로 ANSI 를 지원한다.
+    cmd.exe 구형 환경에서는 os.system("") 호출로 VT 처리 모드를 활성화한다.
+    """
+    if not sys.stdout.isatty():
+        return False
+    if os.environ.get("NO_COLOR"):
+        return False
+    # Windows 에서 ANSI VT 처리 모드 활성화 (no-op on non-Windows)
+    if sys.platform == "win32":
+        os.system("")  # 빈 명령으로 ConEmu/WT VT 처리 초기화
+    return True
+
+
+class LiveDisplay:
+    """마이크 모드에서 터미널 같은 자리를 in-place 로 갱신하는 디스플레이.
+
+    TTY 가 아니거나 NO_COLOR 가 설정되면 fallback 으로 기존 스크롤 출력을 사용한다.
+
+    non-verbose 모드:
+        헤더 1줄 + 클래스 N줄 블록을 in-place 로 갱신한다. verbose 모드와 동일한
+        블록 갱신 로직을 사용하며, 차이는 debounce 정보(votes, sum, 상태) 표시 여부뿐이다.
+        DANGER 이벤트는 블록 위쪽에 스크롤 출력되도록 블록을 지우고 DANGER 를 출력한 뒤
+        블록을 다시 인쇄한다.
+
+    verbose 모드:
+        non-verbose 와 동일한 블록 구조이지만 각 클래스 줄 끝에 debounce 큐 상태
+        (votes=[...] sum=K/N PASS/COOLDOWN/--) 가 추가된다.
+    """
+
+    # ANSI escape 상수
+    _ERASE_LINE = "\x1b[K"        # 커서 위치부터 줄 끝까지 지우기
+    _ERASE_WHOLE_LINE = "\x1b[2K" # 줄 전체 지우기
+    _MOVE_UP = "\x1b[{}A"         # N줄 위로 (format 사용)
+    _CR = "\r"                    # 줄 처음으로
+
+    def __init__(self, verbose: bool) -> None:
+        self._verbose = verbose
+        self._ansi = _ansi_supported()
+        # 이전에 인쇄한 블록의 줄 수 (0이면 아직 미출력). non-verbose/verbose 공용.
+        self._block_lines: int = 0
+
+    # ------------------------------------------------------------------
+    # 공개 메서드
+    # ------------------------------------------------------------------
+
+    def update_no_danger(
+        self,
+        timestamp: float,
+        scores: dict[str, float],
+        trigger: Trigger,
+        debounce_enabled: bool,
+    ) -> None:
+        """DANGER 없는 윈도우 결과를 라이브 갱신한다.
+
+        non-verbose: 클래스 점수만 표시 (debounce 정보 없음).
+        verbose: update_verbose() 를 대신 호출하므로 여기서는 non-verbose 경로만 처리.
+        """
+        if not self._verbose:
+            lines = self._build_block_lines(timestamp, scores, trigger, debounce_enabled=False)
+            if self._ansi:
+                self._redraw_block(lines)
+            else:
+                for line in lines:
+                    print(line)
+
+    def update_verbose(
+        self,
+        timestamp: float,
+        scores: dict[str, float],
+        trigger: Trigger,
+        debounce_enabled: bool,
+    ) -> None:
+        """verbose 모드: 클래스별 score + debounce 상태 블록을 in-place 갱신한다."""
+        lines = self._build_block_lines(timestamp, scores, trigger, debounce_enabled)
+        if self._ansi:
+            self._redraw_block(lines)
+        else:
+            # fallback: 그냥 줄 단위 출력
+            for line in lines:
+                print(line)
+
+    def emit_danger(self, event: TriggerEvent) -> None:
+        """DANGER 이벤트를 라이브 영역 위쪽(스크롤로 남는 줄)으로 출력한다."""
+        danger_line = (
+            f"[{_fmt_ts(event.timestamp)}] DANGER: {event.key} (score={event.score:.4f})"
+        )
+        if self._ansi:
+            self._insert_above_block(danger_line)
+        else:
+            # fallback: 그냥 인쇄
+            print(danger_line)
+
+    def finalize(self) -> None:
+        """Ctrl+C 종료 시 커서를 라이브 영역 아래로 내린다."""
+        if self._ansi:
+            if self._block_lines > 0:
+                # 블록이 출력된 상태이면 블록 아래로 커서 이동
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+
+    # ------------------------------------------------------------------
+    # 공용 블록 빌더 (non-verbose / verbose 통합)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_block_lines(
+        timestamp: float,
+        scores: dict[str, float],
+        trigger: Trigger,
+        debounce_enabled: bool,
+    ) -> list[str]:
+        """헤더 1줄 + 클래스 N줄 블록을 생성한다.
+
+        debounce_enabled=True(verbose) 이면 각 클래스 줄 끝에 debounce 정보를 추가한다.
+        debounce_enabled=False(non-verbose) 이면 점수만 표시한다.
+        """
+        lines: list[str] = []
+        ts_str = _fmt_ts(timestamp)
+        lines.append(f"[{ts_str}] WINDOW scores:")
+
+        for key, score in scores.items():
+            state = trigger.get_debounce_state(key)
+            votes = state.snapshot()
+            vote_sum = sum(votes)
+            n = state.N
+            k = state.K
+
+            if debounce_enabled:
+                passed = vote_sum >= k
+                cooldown_active = state.is_cooldown_active(timestamp, 5.0)
+                if passed and cooldown_active:
+                    status = "COOLDOWN"
+                elif passed:
+                    status = "PASS"
+                else:
+                    status = "--"
+                votes_str = "[" + ",".join(str(v) for v in votes) + "]"
+                lines.append(
+                    f"  {key:<22}: {score:.4f}  votes={votes_str}  sum={vote_sum}/{n}  {status}"
+                )
+            else:
+                lines.append(f"  {key:<22}: {score:.4f}")
+
+        return lines
+
+    # ------------------------------------------------------------------
+    # 블록 in-place 갱신 내부 메서드
+    # ------------------------------------------------------------------
+
+    def _redraw_block(self, lines: list[str]) -> None:
+        """ANSI: 이전 블록 위치로 이동해 줄 단위로 덮어쓴다."""
+        out = []
+        if self._block_lines > 0:
+            # 이전 블록 첫 줄로 이동
+            out.append(self._MOVE_UP.format(self._block_lines))
+
+        for line in lines:
+            out.append(self._CR + self._ERASE_LINE + line + "\n")
+
+        # 새 블록이 이전 블록보다 줄 수가 적을 때 남은 줄을 지운다 (일반적으로 없음)
+        leftover = self._block_lines - len(lines)
+        for _ in range(leftover):
+            out.append(self._CR + self._ERASE_WHOLE_LINE + "\n")
+
+        sys.stdout.write("".join(out))
+        sys.stdout.flush()
+        self._block_lines = len(lines)
+
+    def _insert_above_block(self, danger_line: str) -> None:
+        """ANSI: 블록을 일시적으로 지우고 DANGER 줄을 위에 인쇄한 뒤 블록을 다시 그린다.
+
+        블록이 아직 미출력(_block_lines=0)이면 단순 인쇄.
+        """
+        if self._block_lines == 0:
+            # 블록이 아직 인쇄되지 않은 상태이면 그냥 인쇄
+            sys.stdout.write(danger_line + "\n")
+            sys.stdout.flush()
+            return
+
+        out = []
+        # 블록 첫 줄로 이동
+        out.append(self._MOVE_UP.format(self._block_lines))
+        # 블록 줄들을 모두 지운다 (위에서 아래로)
+        for _ in range(self._block_lines):
+            out.append(self._CR + self._ERASE_WHOLE_LINE + "\n")
+        # 블록 아래에 와 있으므로 다시 첫 줄로 이동
+        out.append(self._MOVE_UP.format(self._block_lines))
+
+        # DANGER 줄 출력 (스크롤 히스토리로 확정)
+        out.append(danger_line + "\n")
+        sys.stdout.write("".join(out))
+        sys.stdout.flush()
+
+        # 블록 줄 수를 리셋해 다음 _redraw_block 이 처음부터 인쇄하게 한다
+        self._block_lines = 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLI 인자 파싱 및 유틸리티
+# ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_args() -> argparse.Namespace:
     # CLI 인자 파서 정의. ArgumentDefaultsHelpFormatter로 --help 시 기본값을 자동 표시한다.
@@ -124,6 +337,10 @@ def _fmt_ts(epoch: float) -> str:
     # Unix epoch 시각을 "YYYY-MM-DD HH:MM:SS.mmm" 문자열로 변환 (밀리초 3자리까지 표시).
     return datetime.fromtimestamp(epoch).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 파일 모드용 출력 함수 (변경 없음 — 스크롤 방식 유지)
+# ─────────────────────────────────────────────────────────────────────────────
 
 def _print_danger(event: TriggerEvent) -> None:
     # 위험 이벤트 한 건을 콘솔에 한 줄로 출력한다.
@@ -236,9 +453,13 @@ def _make_network_log_record(
     return record
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 파일 모드 (스크롤 출력 유지)
+# ─────────────────────────────────────────────────────────────────────────────
+
 def run_file_mode(
     path: str,
-    yamnet: YAMNetWrapper,
+    yamnet,
     danger_filter: DangerFilter,
     trigger: Trigger,
     hop_sec: float,
@@ -277,8 +498,12 @@ def run_file_mode(
     print("[INFO] 파일 분석 완료.", file=sys.stderr)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 마이크 모드 (라이브 디스플레이 적용)
+# ─────────────────────────────────────────────────────────────────────────────
+
 def run_mic_mode(
-    yamnet: YAMNetWrapper,
+    yamnet,
     danger_filter: DangerFilter,
     trigger: Trigger,
     hop_sec: float,
@@ -295,6 +520,8 @@ def run_mic_mode(
     mic.start()  # 비동기 콜백 스레드로 PCM 캡처 시작
     print("[INFO] 마이크 스트림 시작. Ctrl+C로 종료.", file=sys.stderr)
 
+    display = LiveDisplay(verbose=verbose)
+
     try:
         # 마이크는 무한 스트림이므로 KeyboardInterrupt(Ctrl+C)로만 종료된다.
         for _elapsed, frame in mic.iter_frames():
@@ -303,22 +530,24 @@ def run_mic_mode(
             scores = danger_filter.extract(mean_scores)
             events = trigger.evaluate(scores, now=now)
 
+            # DANGER 이벤트: 라이브 영역 위쪽에 확정 출력 (스크롤로 남음)
+            for ev in events:
+                display.emit_danger(ev)
+
+            # 라이브 영역 갱신
             if verbose:
-                _print_verbose(now, scores, trigger, debounce_enabled)
-
-            if events:
-                for ev in events:
-                    _print_danger(ev)
+                display.update_verbose(now, scores, trigger, debounce_enabled)
             else:
-                if not verbose:
-                    _print_no_danger(now, scores)
+                display.update_no_danger(now, scores, trigger, debounce_enabled)
 
+            # JSONL 로그는 기존과 동일하게 매 윈도우 기록
             if log_file is not None:
                 record = _make_log_record(now, scores, events, trigger)
                 log_file.write(json.dumps(record, ensure_ascii=False) + "\n")
                 log_file.flush()
 
     except KeyboardInterrupt:
+        display.finalize()
         print("\n[INFO] 마이크 스트림 종료.", file=sys.stderr)
     finally:
         mic.stop()

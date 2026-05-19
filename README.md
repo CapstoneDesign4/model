@@ -332,3 +332,24 @@ python -m pytest tests -v
 - `docs/m1-initial-model-spec.md`
 - `docs/mic-quickstart.md`
 - `docs/development-plan.md`
+
+## 12. Docker 사용법
+
+Docker로 파일 모드 분석을 빠르게 실행할 수 있습니다. Python / TensorFlow / PortAudio 환경 구성 없이 WAV 파일 분석과 pytest를 실행하고 싶은 경우에 적합합니다. 마이크 모드(`--input mic`)는 Docker에서 지원하지 않으므로 호스트 venv 워크플로를 사용하세요.
+
+```powershell
+# 이미지 빌드 (최초 1회, 10~15분 소요)
+docker build -t yamnet-danger:latest .
+
+# 출력 폴더 준비
+mkdir output -ErrorAction SilentlyContinue
+
+# WAV 파일 분석
+docker run --rm `
+  -v "${PWD}/data/sample:/app/data/sample:ro" `
+  -v "${PWD}/output:/app/output" `
+  yamnet-danger:latest `
+  --input data/sample/test.wav --threshold 0.5 --verbose
+```
+
+상세 사용법: [docs/docker-usage.md](docs/docker-usage.md)
