@@ -240,7 +240,7 @@ def _parse_args() -> argparse.Namespace:
         "--input",
         required=True,
         metavar="FILE_OR_MIC",
-        help="WAV 파일 경로 또는 'mic'",
+        help="WAV 파일 경로, 'mic', 또는 'network'",
     )
     parser.add_argument(
         "--threshold",
@@ -275,6 +275,23 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help="마이크 장치 인덱스 (mic 모드 한정)",
+    )
+    parser.add_argument(
+        "--listen-host",
+        default="0.0.0.0",
+        help="network 모드 UDP 수신 바인드 주소",
+    )
+    parser.add_argument(
+        "--listen-port",
+        type=int,
+        default=5005,
+        help="network 모드 UDP 수신 포트",
+    )
+    parser.add_argument(
+        "--device-count",
+        type=int,
+        default=2,
+        help="network 모드에서 허용할 ESP32 장치 수",
     )
     # M2: debounce 파라미터
     parser.add_argument(
@@ -330,6 +347,14 @@ def _print_danger(event: TriggerEvent) -> None:
     print(f"[{_fmt_ts(event.timestamp)}] DANGER: {event.key} (score={event.score:.4f})")
 
 
+def _print_device_danger(device_id: int, event: TriggerEvent) -> None:
+    """위험 이벤트 한 건을 device_id와 함께 콘솔에 출력한다."""
+    print(
+        f"[{_fmt_ts(event.timestamp)}] device={device_id} "
+        f"DANGER: {event.key} (score={event.score:.4f})"
+    )
+
+
 def _print_no_danger(timestamp: float, scores: dict[str, float]) -> None:
     # 트리거가 없을 때 가장 점수가 높은 클래스를 표시하여 모니터링 가시성을 확보한다.
     if not scores:
@@ -337,6 +362,18 @@ def _print_no_danger(timestamp: float, scores: dict[str, float]) -> None:
     top_key = max(scores, key=lambda k: scores[k])
     top_val = scores[top_key]
     print(f"[{_fmt_ts(timestamp)}] -- no danger (top: {top_key}={top_val:.4f})")
+
+
+def _print_device_no_danger(device_id: int, timestamp: float, scores: dict[str, float]) -> None:
+    """트리거가 없을 때 device_id와 top score를 함께 출력한다."""
+    if not scores:
+        return
+    top_key = max(scores, key=lambda k: scores[k])
+    top_val = scores[top_key]
+    print(
+        f"[{_fmt_ts(timestamp)}] device={device_id} "
+        f"-- no danger (top: {top_key}={top_val:.4f})"
+    )
 
 
 def _print_verbose(
@@ -391,6 +428,29 @@ def _make_log_record(
         # M2: 매 윈도우 레코드에 debounce_votes 항상 포함
         "debounce_votes": trigger.get_debounce_snapshot(),
     }
+
+
+def _make_network_log_record(
+    device_id: int,
+    packet_seq: int,
+    esp_timestamp_ms: int,
+    network_stats: dict,
+    timestamp: float,
+    scores: dict[str, float],
+    events: list[TriggerEvent],
+    trigger: Trigger,
+) -> dict:
+    record = _make_log_record(timestamp, scores, events, trigger)
+    record.update(
+        {
+            "input": "network",
+            "device_id": device_id,
+            "packet_seq": packet_seq,
+            "esp_timestamp_ms": esp_timestamp_ms,
+            "network_stats": network_stats,
+        }
+    )
+    return record
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -493,6 +553,86 @@ def run_mic_mode(
         mic.stop()
 
 
+def run_network_mode(
+    yamnet: YAMNetWrapper,
+    danger_filter: DangerFilter,
+    debounce_window: int,
+    debounce_k: int,
+    debounce_enabled: bool,
+    listen_host: str,
+    listen_port: int,
+    device_count: int,
+    verbose: bool,
+    log_file: Optional[object],
+) -> None:
+    """ESP32 UDP PCM 스트림을 받아 장치별로 위험음을 판정한다."""
+    from src.audio_io.network_stream import NetworkAudioStream
+
+    stream = NetworkAudioStream(
+        host=listen_host,
+        port=listen_port,
+        device_count=device_count,
+    )
+    stream.start()
+    triggers: dict[int, Trigger] = {}
+    print(
+        f"[INFO] 네트워크 스트림 시작: udp://{listen_host}:{listen_port}, "
+        f"device_count={device_count}. Ctrl+C로 종료.",
+        file=sys.stderr,
+    )
+
+    try:
+        for network_frame in stream.iter_frames():
+            device_id = network_frame.device_id
+            trigger = triggers.get(device_id)
+            if trigger is None:
+                trigger = Trigger(
+                    danger_filter,
+                    debounce_window=debounce_window,
+                    debounce_k=debounce_k,
+                    debounce_enabled=debounce_enabled,
+                )
+                triggers[device_id] = trigger
+
+            now = network_frame.timestamp
+            mean_scores = yamnet.infer_mean_scores(network_frame.frame)
+            scores = danger_filter.extract(mean_scores)
+            events = trigger.evaluate(scores, now=now)
+
+            if verbose:
+                print(
+                    f"[{_fmt_ts(now)}] device={device_id} "
+                    f"seq={network_frame.seq} esp_ts={network_frame.esp_timestamp_ms}ms"
+                )
+                _print_verbose(now, scores, trigger, debounce_enabled)
+
+            if events:
+                for ev in events:
+                    _print_device_danger(device_id, ev)
+            else:
+                if not verbose:
+                    _print_device_no_danger(device_id, now, scores)
+
+            if log_file is not None:
+                record = _make_network_log_record(
+                    device_id=device_id,
+                    packet_seq=network_frame.seq,
+                    esp_timestamp_ms=network_frame.esp_timestamp_ms,
+                    network_stats=network_frame.stats.__dict__,
+                    timestamp=now,
+                    scores=scores,
+                    events=events,
+                    trigger=trigger,
+                )
+                log_file.write(json.dumps(record, ensure_ascii=False) + "\n")
+                log_file.flush()
+
+    except KeyboardInterrupt:
+        print("\n[INFO] 네트워크 스트림 종료.", file=sys.stderr)
+    finally:
+        stream.stop()
+
+
 def main() -> None:
     # 1) CLI 인자 파싱.
     args = _parse_args()
@@ -541,6 +681,19 @@ def main() -> None:
             run_mic_mode(
                 yamnet, danger_filter, trigger,
                 args.hop, args.verbose, debounce_enabled, log_file, args.device,
+            )
+        elif args.input.lower() == "network":
+            run_network_mode(
+                yamnet=yamnet,
+                danger_filter=danger_filter,
+                debounce_window=debounce_window,
+                debounce_k=debounce_k,
+                debounce_enabled=debounce_enabled,
+                listen_host=args.listen_host,
+                listen_port=args.listen_port,
+                device_count=args.device_count,
+                verbose=args.verbose,
+                log_file=log_file,
             )
         else:
             run_file_mode(
